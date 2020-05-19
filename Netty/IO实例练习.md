@@ -153,4 +153,7 @@ public class NIOClient {
     }
 }
 ```
-结果：每有一个客户端连接都会生成一个不同的SocketChannel。
+结果
+```
+每有一个客户端连接都会生成一个不同的SocketChannel。
+```
