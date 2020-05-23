@@ -246,7 +246,6 @@ public class NettyClientHandler extends ChannelInboundHandlerAdapter {
 ```
 
 分析：
-
 	1. 每个NioEventLoop包含什么？
 		* selector（每个NioEventLoop都有自己独立的selector，即有自己独立的循环）
 		* taskQueue
