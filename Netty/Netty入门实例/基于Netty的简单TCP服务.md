@@ -3,7 +3,7 @@ TCP服务：创建Netty项目
 要求：
 
 	1. Netty服务器在8889端口监听，客户端能发送消息给服务器：“hello，服务器！”。
-	2. 服务器可以恢复消息给客户端：“hello，客户端！”。
+	2. 服务器可以回复消息给客户端：“hello，客户端！”。
 
 思路：
 
@@ -39,6 +39,7 @@ public class NettyServer {
         // 1.创建两个线程组 bossGroup、workerGroup
         // 2.bossGroup只是处理accept（连接）请求，真正的与客户端进行业务处理会交给workerGroup完成
         // 3.两者都是无限循环
+	// 4.bossGroup和workerGroup含有的子线程（NioEventLoop）的个数 = 默认实际cpu核数 * 2
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
 
