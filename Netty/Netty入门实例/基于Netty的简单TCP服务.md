@@ -245,3 +245,26 @@ public class NettyClientHandler extends ChannelInboundHandlerAdapter {
 }
 ```
 
+分析：
+
+	1. 每个NioEventLoop包含什么？
+		* selector（每个NioEventLoop都有自己独立的selector，即有自己独立的循环）
+		* taskQueue
+		* executor
+		* 等等...
+		
+	2. channel 和 pipeline 的关系。
+		* pipeline的底层数据结构是一个双向链表。
+		* channel可以得到pipeline。
+		* pipeline可以反向得到channel。
+		* 两者实际上是互相包含的关系。
+		
+	3. ChannelHandlerContext（ctx）包含什么？
+		* handler：自定义的Handler。
+		* pipeline：DefaultChannelPipeline，通过这个可以拿到channel。
+		* channel
+		* remoteAddress
+		* localAddress
+		* 等等...
+		
+
