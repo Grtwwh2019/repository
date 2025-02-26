@@ -1,1 +1,264 @@
 
+以下是完整的Java代码，它实现了从配置文件读取服务器信息，通过Swing界面选择服务器并执行启动、停止操作，以及使用类似tail -f的方式实时显示日志。
+
+1. 配置文件 servers.properties
+
+假设配置文件 servers.properties 内容如下：
+server1.host=server1.example.com
+server1.port=22
+server1.username=user1
+server1.password=password1
+server2.host=server2.example.com
+server2.port=22
+server2.username=user2
+server2.password=password2
+server3.host=server3.example.com
+server3.port=22
+server3.username=user3
+server3.password=password3
+server4.host=server4.example.com
+server4.port=22
+server4.username=user4
+server4.password=password4
+server5.host=server5.example.com
+server5.port=22
+server5.username=user5
+server5.password=password5
+server6.host=server6.example.com
+server6.port=22
+server6.username=user6
+server6.password=password6
+server7.host=server7.example.com
+server7.port=22
+server7.username=user7
+server7.password=password7
+2. Java 代码
+import com.jcraft.jsch.*;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+class ServerInfo {
+    String host;
+    int port;
+    String username;
+    String password;
+
+    public ServerInfo(String host, int port, String username, String password) {
+        this.host = host;
+        this.port = port;
+        this.username = username;
+        this.password = password;
+    }
+
+    @Override
+    public String toString() {
+        return "Server: " + host;
+    }
+}
+
+class SshUtil {
+    private final List<ServerInfo> serverInfos;
+
+    public SshUtil(List<ServerInfo> serverInfos) {
+        this.serverInfos = serverInfos;
+    }
+
+    public List<ServerInfo> getServerInfos() {
+        return serverInfos;
+    }
+
+    public String executeCommand(int serverIndex, String command) {
+        if (serverIndex < 0 || serverIndex >= serverInfos.size()) {
+            return "Invalid server index";
+        }
+        ServerInfo serverInfo = serverInfos.get(serverIndex);
+        StringBuilder output = new StringBuilder();
+        try (JSch jsch = new JSch()) {
+            Session session = jsch.getSession(serverInfo.username, serverInfo.host, serverInfo.port);
+            session.setPassword(serverInfo.password);
+            session.setConfig("StrictHostKeyChecking", "no");
+            session.connect();
+
+            ChannelExec channel = (ChannelExec) session.openChannel("exec");
+            channel.setCommand(command);
+            channel.setInputStream(null);
+            channel.setErrStream(System.err);
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(channel.getInputStream()));
+            channel.connect();
+            String line;
+            while ((line = reader.readLine())!= null) {
+                output.append(line).append("\n");
+            }
+            channel.disconnect();
+            session.disconnect();
+        } catch (JSchException | java.io.IOException e) {
+            e.printStackTrace();
+            return "Error executing command: " + e.getMessage();
+        }
+        return output.toString();
+    }
+}
+
+class LogReader {
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private volatile boolean isRunning = false;
+
+    public void readLogFile(int serverIndex, SshUtil sshUtil, String logFilePath, JTextArea outputTextArea) {
+        if (isRunning) {
+            return;
+        }
+        isRunning = true;
+        executorService.submit(() -> {
+            try (JSch jsch = new JSch()) {
+                Session session = jsch.getSession(sshUtil.getServerInfos().get(serverIndex).username,
+                        sshUtil.getServerInfos().get(serverIndex).host,
+                        sshUtil.getServerInfos().get(serverIndex).port);
+                session.setPassword(sshUtil.getServerInfos().get(serverIndex).password);
+                session.setConfig("StrictHostKeyChecking", "no");
+                session.connect();
+
+                ChannelExec channel = (ChannelExec) session.openChannel("exec");
+                channel.setCommand("tail -f " + logFilePath);
+                channel.setInputStream(null);
+                channel.setErrStream(System.err);
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(channel.getInputStream()));
+                channel.connect();
+                String line;
+                while ((line = reader.readLine())!= null && isRunning) {
+                    SwingUtilities.invokeLater(() -> outputTextArea.append(line + "\n"));
+                }
+                channel.disconnect();
+                session.disconnect();
+            } catch (Exception e) {
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() -> outputTextArea.append("Error reading log: " + e.getMessage() + "\n"));
+            } finally {
+                isRunning = false;
+            }
+        });
+    }
+
+    public void stopReading() {
+        isRunning = false;
+        executorService.shutdownNow();
+    }
+}
+
+public class AppControlGUI {
+    private final SshUtil sshUtil;
+    private final LogReader logReader;
+    private JTextArea outputTextArea;
+    private JComboBox<ServerInfo> serverComboBox;
+
+    public AppControlGUI() {
+        List<ServerInfo> serverInfos = loadServersFromProperties();
+        sshUtil = new SshUtil(serverInfos);
+        logReader = new LogReader();
+
+        JFrame frame = new JFrame("App Control");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(1200, 800);
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BorderLayout());
+
+        serverComboBox = new JComboBox<>(serverInfos.toArray(new ServerInfo[0]));
+
+        JButton startButton = new JButton("Start App");
+        JButton stopButton = new JButton("Stop App");
+        JButton logButton = new JButton("Get Log");
+        JButton stopLogButton = new JButton("Stop Log");
+
+        startButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int serverIndex = serverComboBox.getSelectedIndex();
+                String command = "path/to/your/startup/script.sh";
+                String result = sshUtil.executeCommand(serverIndex, command);
+                outputTextArea.setText(result);
+            }
+        });
+
+        stopButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int serverIndex = serverComboBox.getSelectedIndex();
+                String command = "path/to/your/shutdown/script.sh";
+                String result = sshUtil.executeCommand(serverIndex, command);
+                outputTextArea.setText(result);
+            }
+        });
+
+        logButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int serverIndex = serverComboBox.getSelectedIndex();
+                String logFilePath = "path/to/your/log/file.log";
+                logReader.readLogFile(serverIndex, sshUtil, logFilePath, outputTextArea);
+            }
+        });
+
+        stopLogButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                logReader.stopReading();
+            }
+        });
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(serverComboBox);
+        buttonPanel.add(startButton);
+        buttonPanel.add(stopButton);
+        buttonPanel.add(logButton);
+        buttonPanel.add(stopLogButton);
+
+        outputTextArea = new JTextArea();
+        outputTextArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(outputTextArea);
+
+        panel.add(buttonPanel, BorderLayout.NORTH);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        frame.add(panel);
+        frame.setVisible(true);
+    }
+
+    private List<ServerInfo> loadServersFromProperties() {
+        List<ServerInfo> serverInfos = new ArrayList<>();
+        Properties properties = new Properties();
+        try (InputStream inputStream = new FileInputStream("servers.properties")) {
+            properties.load(inputStream);
+            for (int i = 1; i <= 7; i++) {
+                String host = properties.getProperty("server" + i + ".host");
+                int port = Integer.parseInt(properties.getProperty("server" + i + ".port"));
+                String username = properties.getProperty("server" + i + ".username");
+                String password = properties.getProperty("server" + i + ".password");
+                serverInfos.add(new ServerInfo(host, port, username, password));
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(null, "Error loading servers.properties: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+        return serverInfos;
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                new AppControlGUI();
+            }
+        });
+    }
+}
+请根据实际的服务器信息、脚本路径和日志文件路径调整代码中的相关部分。这个代码示例提供了一个完整的基于Swing的图形界面应用程序，用于管理多个服务器的启动、停止和实时日志查看。
